@@ -51,8 +51,8 @@ describe('JSONParsed', () => {
       expectTypeOf<Actual>().toEqualTypeOf<Expected>()
     })
     it('toJSON is not called recursively', () => {
-      type Actual = JSONParsed<{ toJSON(): { toJSON(): number } }>
-      type Expected = {}
+      type Actual = JSONParsed<{ toJSON(): { toJSON(): number; foo: number } }>
+      type Expected = { foo: number }
       expectTypeOf<Actual>().toEqualTypeOf<Expected>()
     })
     it('should convert { a: { toJSON() => T } } to { a: T }', () => {

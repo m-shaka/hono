@@ -44,7 +44,7 @@ export type JSONParsed<T> = T extends { toJSON(): infer J }
   ? (() => J) extends () => JSONPrimitive
     ? J
     : (() => J) extends () => { toJSON(): unknown }
-    ? {}
+    ? Omit<J, 'toJSON'>
     : JSONParsed<J>
   : T extends JSONPrimitive
   ? T
