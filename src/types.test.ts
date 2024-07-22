@@ -2249,15 +2249,60 @@ describe('Returning type from `app.use(path, mw)`', () => {
   })
 })
 describe('generic typed variables', () => {
+  function ok(c: Context) {
+    return <TData>(data: TData) => {
+      const res = c.json({ data })
+      // `{ data: TData } extends JSONValue` is suspended until TData is decided
+      /**
+       * ```
+       * {
+       *   data: TData;
+       * } extends JSONValue ? { [K in keyof OmitSymbolKeys<{
+       *   data: TData;
+       * }> as IsInvalid<{
+       *   data: TData;
+       * }[K]> extends true ? never : K]: boolean extends IsInvalid<...> ? JSONParsed<...> | undefined : JSONParsed<...>; } : never
+      */
+      res._data
+      return res
+    }
+  }
+
+  function okExtendsNumber(c: Context) {
+    return <TData extends number>(data: TData) => {
+      const res = c.json({ data })
+      // `{ data: TData } extends JSONValue` is suspended until TData is decided
+      res._data
+      return res
+    }
+  }
+
+  function okExtendsBigint(c: Context) {
+    return <TData extends bigint>(data: TData) => {
+      const res = c.json({ data })
+      // `{ data: TData } extends JSONValue` is suspended until TData is decided
+      res._data
+      return res
+    }
+  }
+
   type Variables = {
-    ok: <TData>(data: TData) => TypedResponse<{ data: TData }>
+    ok: ReturnType<typeof ok>
+    okExtendsNumber: ReturnType<typeof okExtendsNumber>
+    okExtendsBigint: ReturnType<typeof okExtendsBigint>
   }
   const app = new Hono<{ Variables: Variables }>()
 
   it('Should set and get variables with correct types', async () => {
     const route = app
       .use('*', async (c, next) => {
-        c.set('ok', (data) => c.json({ data }))
+        c.set('ok', (data) => {
+          const res = c.json({ data })
+          // `{ data: TData } extends JSONValue` is false so _data is never
+          // I don't know why
+          assertType<never>(res._data)
+          return res
+        })
         await next()
       })
       .get('/', (c) => {
@@ -2266,6 +2311,46 @@ describe('generic typed variables', () => {
       })
     type Actual = ExtractSchema<typeof route>['/']['$get']['output']
     type Expected = { data: string }
+    expectTypeOf<Actual>().toEqualTypeOf<Expected>()
+  })
+  it('Should set and get variables with correct types if there is type constraints extending number', async () => {
+    const route = app
+      .use('*', async (c, next) => {
+        // @ts-expect-error
+        c.set('okExtendsNumber', (data) => {
+          const res = c.json({ data })
+          // `{ data: number } extends JSONValue` is true so _data is not never
+          // @ts-expect-error
+          assertType<never>(res._data)
+          return res
+        })
+        await next()
+      })
+      .get('/', (c) => {
+        const ok = c.get('okExtendsNumber')
+        return ok(123)
+      })
+    type Actual = ExtractSchema<typeof route>['/']['$get']['output']
+    type Expected = { data: 123 }
+    expectTypeOf<Actual>().toEqualTypeOf<Expected>()
+  })
+  it('Should set and get variables with correct types if there is type constraints extending bigint', async () => {
+    const route = app
+      .use('*', async (c, next) => {
+        c.set('okExtendsBigint', (data) => {
+          const res = c.json({ data })
+          // `{ data: bigint } extends JSONValue` is false so _data is never
+          assertType<never>(res._data)
+          return res
+        })
+        await next()
+      })
+      .get('/', (c) => {
+        const ok = c.get('okExtendsBigint')
+        return ok(123n)
+      })
+    type Actual = ExtractSchema<typeof route>['/']['$get']['output']
+    type Expected = never
     expectTypeOf<Actual>().toEqualTypeOf<Expected>()
   })
 })
